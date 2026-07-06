@@ -13,13 +13,14 @@ button:disabled{opacity:.5}.result{display:none;margin-top:18px;background:#f7f7
 <body><main><div class="card"><h1>한 줄 일정</h1><p class="sub">말하듯 적으면 Notion에 저장해요.</p>
 <textarea id="input" placeholder="예: 금요일 오후 2시 30분 친구 만나기"></textarea>
 <button id="save" onclick="save()">Notion에 저장</button>
-<div id="result" class="result"><div class="row"><span class="label">할 일</span><b id="title"></b></div><div class="row"><span class="label">일시</span><span id="when"></span></div></div>
+<div id="result" class="result"><div class="row"><span class="label">할 일</span><b id="title"></b></div><div class="row"><span class="label">구분</span><span id="when"></span></div></div>
 <div id="msg" class="msg"></div><div class="hint">지원: 오늘·내일·모레, 월~일요일, 7월 12일, 오전·오후, 2시·2시 30분·2:30</div>
 </div></main>
 <script>
 const $=id=>document.getElementById(id), pad=n=>String(n).padStart(2,"0");
 const days={"일요일":0,"월요일":1,"화요일":2,"수요일":3,"목요일":4,"금요일":5,"토요일":6};
 function parse(raw){
+ if(!raw) throw Error("할 일이나 일정을 적어주세요.");
  let d=new Date(); d.setHours(0,0,0,0); let dateFound=true;
  if(raw.includes("모레")) d.setDate(d.getDate()+2);
  else if(raw.includes("내일")) d.setDate(d.getDate()+1);
@@ -28,19 +29,19 @@ function parse(raw){
   for(const [name,num] of Object.entries(days)) if(raw.includes(name)){let diff=(num-d.getDay()+7)%7;if(diff===0)diff=7;d.setDate(d.getDate()+diff);dateFound=true;break}
   const md=raw.match(/(\d{1,2})월\s*(\d{1,2})일/); if(md){d=new Date(new Date().getFullYear(),+md[1]-1,+md[2]);dateFound=true}
  }
- if(!dateFound) throw Error("날짜를 찾지 못했어요.");
  let h=9,m=0,timeFound=false, x=raw.match(/(\d{1,2}):(\d{2})/), k=raw.match(/(\d{1,2})시(?:\s*(\d{1,2})분)?/);
  if(x){h=+x[1];m=+x[2];timeFound=true}else if(k){h=+k[1];m=+(k[2]||0);timeFound=true}
- if(!timeFound) throw Error("시간을 찾지 못했어요.");
  if(raw.includes("오후")&&h<12)h+=12;if(raw.includes("오전")&&h===12)h=0;
+ let title=raw.replace(/오늘|내일|모레/g,"").replace(/[일월화수목금토]요일/g,"").replace(/\d{1,2}월\s*\d{1,2}일/g,"").replace(/오전|오후/g,"").replace(/\d{1,2}:\d{2}/g,"").replace(/\d{1,2}시(?:\s*\d{1,2}분)?/g,"").replace(/\s+/g," ").trim()||raw;
+ if(!dateFound) return {title,type:"할 일",display:"날짜 없음"};
+ if(!timeFound) return {title,type:"할 일",start:null,display:`${d.getFullYear()}.${pad(d.getMonth()+1)}.${pad(d.getDate())}`};
  d.setHours(h,m,0,0);
- let title=raw.replace(/오늘|내일|모레/g,"").replace(/[일월화수목금토]요일/g,"").replace(/\d{1,2}월\s*\d{1,2}일/g,"").replace(/오전|오후/g,"").replace(/\d{1,2}:\d{2}/g,"").replace(/\d{1,2}시(?:\s*\d{1,2}분)?/g,"").replace(/\s+/g," ").trim()||"새 일정";
- return {title,start:d.toISOString(),display:`${d.getFullYear()}.${pad(d.getMonth()+1)}.${pad(d.getDate())} ${pad(h)}:${pad(m)}`};
+ return {title,type:"일정",start:d.toISOString(),display:`${d.getFullYear()}.${pad(d.getMonth()+1)}.${pad(d.getDate())} ${pad(h)}:${pad(m)}`};
 }
 async function save(){
  const msg=$("msg"), btn=$("save"); msg.textContent="";msg.className="msg";
  try{
-  const p=parse($("input").value.trim()); $("title").textContent=p.title;$("when").textContent=p.display;$("result").style.display="block";
+  const p=parse($("input").value.trim()); $("title").textContent=p.title;$("when").textContent=`${p.type} · ${p.display}`;$("result").style.display="block";
   btn.disabled=true;btn.textContent="저장 중…";
   const r=await fetch("/api/save",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(p)});
   const j=await r.json(); if(!r.ok)throw Error(j.error||"저장 실패");

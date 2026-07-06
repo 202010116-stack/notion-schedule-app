@@ -5,8 +5,8 @@ export default async function handler(req, res) {
   const token = process.env.NOTION_TOKEN;
   if (!token) return res.status(500).json({ error: "NOTION_TOKEN 설정이 필요합니다." });
 
-  const { title, start, display } = req.body || {};
-  if (!title || !start) return res.status(400).json({ error: "일정 정보가 부족합니다." });
+  const { title, start, display, type } = req.body || {};
+  if (!title) return res.status(400).json({ error: "내용이 부족합니다." });
 
   const response = await fetch("https://api.notion.com/v1/pages", {
     method: "POST",
@@ -18,11 +18,11 @@ export default async function handler(req, res) {
     body: JSON.stringify({
       parent: { type: "page_id", page_id: PAGE_ID },
       properties: {
-        title: { type: "title", title: [{ type: "text", text: { content: `${display} · ${title}` } }] }
+        title: { type: "title", title: [{ type: "text", text: { content: `${type === "할 일" ? "☑" : "📅"} ${display} · ${title}` } }] }
       },
       children: [{
         object: "block", type: "paragraph",
-        paragraph: { rich_text: [{ type: "text", text: { content: `일정: ${display}` } }] }
+        paragraph: { rich_text: [{ type: "text", text: { content: `${type || "일정"}: ${display}` } }] }
       }]
     })
   });
