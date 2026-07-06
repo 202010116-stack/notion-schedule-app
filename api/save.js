@@ -1,33 +1,6 @@
-const PAGE_ID = "395f1b55e128809bb8aec86a19e5d80f";
-
-export default async function handler(req, res) {
-  if (req.method !== "POST") return res.status(405).json({ error: "POST만 지원합니다." });
-  const token = process.env.NOTION_TOKEN;
-  if (!token) return res.status(500).json({ error: "NOTION_TOKEN 설정이 필요합니다." });
-
-  const { title, start, display, type } = req.body || {};
-  if (!title) return res.status(400).json({ error: "내용이 부족합니다." });
-
-  const response = await fetch("https://api.notion.com/v1/pages", {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${token}`,
-      "Content-Type": "application/json",
-      "Notion-Version": "2026-03-11"
-    },
-    body: JSON.stringify({
-      parent: { type: "page_id", page_id: PAGE_ID },
-      properties: {
-        title: { type: "title", title: [{ type: "text", text: { content: `${type === "할 일" ? "☑" : "📅"} ${display} · ${title}` } }] }
-      },
-      children: [{
-        object: "block", type: "paragraph",
-        paragraph: { rich_text: [{ type: "text", text: { content: `${type || "일정"}: ${display}` } }] }
-      }]
-    })
-  });
-
-  const data = await response.json();
-  if (!response.ok) return res.status(response.status).json({ error: data.message || "Notion 저장 실패" });
-  return res.status(200).json({ ok: true, url: data.url });
-}
+const PAGE_ID="395f1b55e128809bb8aec86a19e5d80f";
+const CALENDAR_DATABASE_ID="395f1b55e128809480dbdf50c07d3f27";
+const V="2026-03-11";
+async function n(path,token,options={}){const r=await fetch(`https://api.notion.com${path}`,{...options,headers:{"Authorization":`Bearer ${token}`,"Content-Type":"application/json","Notion-Version":V,...(options.headers||{})}});const d=await r.json();if(!r.ok)throw Error(d.message||`Notion 오류 (${r.status})`);return d}
+async function calendarInfo(token){const db=await n(`/v1/databases/${CALENDAR_DATABASE_ID}`,token);const id=db.data_sources?.[0]?.id;if(!id)throw Error("캘린더 데이터 소스를 찾지 못했어요.");const ds=await n(`/v1/data_sources/${id}`,token);const e=Object.entries(ds.properties||{});const title=e.find(([,p])=>p.type==="title")?.[0],date=e.find(([,p])=>p.type==="date")?.[0];if(!title)throw Error("캘린더 제목 속성을 찾지 못했어요.");if(!date)throw Error("캘린더 날짜 속성을 찾지 못했어요.");return{id,title,date}}
+export default async function handler(req,res){if(req.method!=="POST")return res.status(405).json({error:"POST만 지원합니다."});const token=process.env.NOTION_TOKEN;if(!token)return res.status(500).json({error:"NOTION_TOKEN 설정이 필요합니다."});const{title,start,display}=req.body||{};if(!title)return res.status(400).json({error:"내용이 부족합니다."});try{if(display&&display!=="날짜 없음"){const c=await calendarInfo(token);const dateValue=start?{start}:{start:display.replaceAll(".","-")};const data=await n("/v1/pages",token,{method:"POST",body:JSON.stringify({parent:{type:"data_source_id",data_source_id:c.id},properties:{[c.title]:{type:"title",title:[{type:"text",text:{content:title}}]},[c.date]:{type:"date",date:dateValue}}})});return res.status(200).json({ok:true,destination:"calendar",url:data.url})}const data=await n("/v1/pages",token,{method:"POST",body:JSON.stringify({parent:{type:"page_id",page_id:PAGE_ID},properties:{title:{type:"title",title:[{type:"text",text:{content:`☑ 날짜 없음 · ${title}`}}]}}})});return res.status(200).json({ok:true,destination:"list",url:data.url})}catch(e){return res.status(500).json({error:e.message||"Notion 저장 실패"})}}
